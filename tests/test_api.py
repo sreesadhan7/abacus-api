@@ -35,3 +35,13 @@ def test_concurrent_adds_keep_the_expected_total(tmp_path: Path) -> None:
         list(executor.map(lambda _: add_one(), range(120)))
 
     assert store.get_total() == 120
+
+
+def test_concurrent_initialization_is_safe(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'abacus.db'}"
+    stores = [AbacusStore(build_engine(database_url)) for _ in range(8)]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(lambda store: store.initialize(), stores))
+
+    assert stores[0].get_total() == 0

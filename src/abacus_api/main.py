@@ -32,7 +32,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/healthz")
     def healthcheck() -> dict[str, str]:
-        return {"status": "ok"}
+        return {"status": "ok", "node": app_settings.node_name}
 
     @app.post("/abacus/number", response_model=SumResponse)
     def add_number(payload: AddNumberRequest) -> SumResponse:

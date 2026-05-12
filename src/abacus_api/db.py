@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import Column, Integer, MetaData, Table, create_engine, event, select, update
+from sqlalchemy import Column, Integer, MetaData, Table, create_engine, event, insert, select, update
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import IntegrityError
 
 metadata = MetaData()
 
@@ -89,8 +90,7 @@ class AbacusStore:
 
     @staticmethod
     def _ensure_row(connection: Connection) -> None:
-        exists = connection.execute(
-            select(abacus_state.c.id).where(abacus_state.c.id == 1)
-        ).scalar_one_or_none()
-        if exists is None:
-            connection.execute(abacus_state.insert().values(id=1, total=0))
+        try:
+            connection.execute(insert(abacus_state).values(id=1, total=0))
+        except IntegrityError:
+            pass
