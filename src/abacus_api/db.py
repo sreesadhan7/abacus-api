@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlalchemy import Column, Integer, MetaData, Table, create_engine, event, insert, select, update
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import OperationalError
 
 metadata = MetaData()
 
@@ -35,6 +36,7 @@ def build_engine(database_url: str) -> Engine:
 
     if database_url.startswith("sqlite"):
         _configure_sqlite(engine)
+        _initialize_sqlite(engine)
 
     return engine
 
@@ -43,10 +45,18 @@ def _configure_sqlite(engine: Engine) -> None:
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record) -> None:  # type: ignore[no-untyped-def]
         cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=FULL")
         cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
+
+
+def _initialize_sqlite(engine: Engine) -> None:
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql("PRAGMA journal_mode=WAL")
+            connection.exec_driver_sql("PRAGMA synchronous=FULL")
+    except OperationalError as error:
+        if "locked" not in str(error).lower():
+            raise
 
 
 class AbacusStore:
@@ -54,7 +64,11 @@ class AbacusStore:
         self.engine = engine
 
     def initialize(self) -> None:
-        metadata.create_all(self.engine)
+        try:
+            metadata.create_all(self.engine)
+        except OperationalError as error:
+            if "already exists" not in str(error):
+                raise
         with self.engine.begin() as connection:
             self._ensure_row(connection)
 

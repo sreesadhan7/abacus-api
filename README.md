@@ -15,8 +15,8 @@ This repository satisfies those requirements with:
 - FastAPI for the HTTP API.
 - SQLAlchemy for database access.
 - A single shared-row transactional storage model.
-- SQLite for the simplest same-machine two-node demo.
-- PostgreSQL for the stronger real multi-container deployment story.
+- SQLite for the same-machine two-node demo.
+- PostgreSQL for a stronger multi-container deployment story.
 
 ## Table of contents
 
@@ -74,8 +74,8 @@ Why this matters:
 
 Recommended storage choice:
 
-- Use SQLite only for a same-machine demo where multiple processes share the same file.
-- Use PostgreSQL for real multi-node or multi-container deployment.
+- Use SQLite for the required same-machine demo where multiple processes share the same file.
+- Use PostgreSQL when you want to demonstrate separate containers sharing one central transactional database.
 
 ## API reference
 
@@ -125,7 +125,7 @@ Response:
 
 ### `GET /healthz`
 
-Simple health endpoint used for local checks and container health checks.
+Returns a simple health response and identifies which node answered the request.
 
 Response:
 
@@ -233,46 +233,67 @@ This file covers the most important behavior:
 
 ### `compose.yaml`
 
-This file defines a ready-to-run multi-container demo:
+This file defines the stronger evaluation demo:
 
 - one PostgreSQL container,
-- two API containers,
+- two FastAPI containers,
+- one shared database URL across both nodes,
 - health checks for the database and both app nodes.
 
 ### `Dockerfile`
 
-This packages the application into a Python 3.12 container image and starts Uvicorn.
+This file packages the FastAPI service into a Python 3.12 container image.
 
 ## Requirements and prerequisites
-
-Choose one of the following paths.
-
-### Option 1: Python-only local run
 
 You need:
 
 - Python 3.12+
 - PowerShell or another terminal
 
-### Option 2: Docker run
-
-You need:
+Optional for the stronger multi-container demo:
 
 - Docker Desktop or another working Docker environment
 - Docker Compose support
 
-## Quick start
+## Configuration
 
-If you want the fastest route to seeing the project work, use Docker:
+The application supports two configuration modes.
 
-```powershell
-docker compose up --build -d
-docker compose ps
-Invoke-RestMethod -Uri http://127.0.0.1:8000/healthz
-Invoke-RestMethod -Uri http://127.0.0.1:8001/healthz
+### Local SQLite mode
+
+For the simplest local Python demo, you do not need a `.env` file.
+
+The default in [src/abacus_api/config.py](src/abacus_api/config.py) is:
+
+```text
+sqlite:///./data/abacus.db
 ```
 
-If you want to run it directly on your machine with Python, go to the next section.
+That means this works even without setting `ABACUS_DB_URL`:
+
+```powershell
+python -m uvicorn abacus_api.main:app --host 127.0.0.1 --port 8000
+```
+
+### Docker/PostgreSQL mode
+
+For the stronger multi-container demo, the PostgreSQL connection URL should come from environment variables.
+
+Use the included example file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then adjust values in `.env` only if needed. Docker Compose reads those values automatically.
+
+## Quick start
+
+If you want the fastest route to a strict job-evaluation answer, use one of these paths:
+
+- local two-node demo with SQLite,
+- two-container demo with PostgreSQL.
 
 ## Run locally with Python
 
@@ -289,7 +310,6 @@ python -m pip install -e .[dev]
 
 ```powershell
 $env:ABACUS_DB_URL = "sqlite:///./data/abacus.db"
-$env:ABACUS_NODE_NAME = "local-1"
 python -m uvicorn abacus_api.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -297,7 +317,6 @@ python -m uvicorn abacus_api.main:app --host 127.0.0.1 --port 8000
 
 ```powershell
 $env:ABACUS_DB_URL = "sqlite:///./data/abacus.db"
-$env:ABACUS_NODE_NAME = "local-2"
 python -m uvicorn abacus_api.main:app --host 127.0.0.1 --port 8001
 ```
 
@@ -305,25 +324,22 @@ Both nodes point at the same SQLite database file, so they should observe the sa
 
 ## Run with Docker Compose
 
-Docker Compose runs the stronger deployment shape:
+This path is stronger for evaluation because it demonstrates two separate app containers sharing one PostgreSQL database.
 
-- PostgreSQL as the shared database,
-- `api-1` on port `8000`,
-- `api-2` on port `8001`.
+Before starting the stack, create a `.env` file from the sample:
+
+```powershell
+Copy-Item .env.example .env
+```
 
 ### 1. Start the stack
 
 ```powershell
 docker compose up --build -d
-```
-
-### 2. Check container status
-
-```powershell
 docker compose ps
 ```
 
-### 3. Verify both app nodes
+### 2. Verify both nodes are healthy
 
 ```powershell
 Invoke-RestMethod -Uri http://127.0.0.1:8000/healthz
@@ -337,7 +353,7 @@ Expected shape:
 {"status":"ok","node":"api-2"}
 ```
 
-### 4. Stop the stack
+### 3. Stop the stack
 
 ```powershell
 docker compose down -v
@@ -372,6 +388,13 @@ At this point both nodes should return the same total.
 
 ```powershell
 Invoke-RestMethod -Method Delete -Uri http://127.0.0.1:8001/abacus/sum
+```
+
+### Check which node answered
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8000/healthz
+Invoke-RestMethod -Uri http://127.0.0.1:8001/healthz
 ```
 
 ## Load and consistency simulation
@@ -425,22 +448,21 @@ The tests cover:
 
 Controls which database every node uses.
 
-Examples:
-
 ```powershell
 $env:ABACUS_DB_URL = "sqlite:///./data/abacus.db"
 $env:ABACUS_DB_URL = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/abacus"
 ```
 
+For local Python runs, the SQLite value is optional because the code already defaults to it.
+
+For Docker/PostgreSQL runs, `ABACUS_DB_URL` should come from `.env` or your shell environment.
+
 ### `ABACUS_NODE_NAME`
 
-Sets the node identity returned by `/healthz`.
-
-Examples:
+Labels each running application instance in `/healthz`.
 
 ```powershell
 $env:ABACUS_NODE_NAME = "local-1"
-$env:ABACUS_NODE_NAME = "api-2"
 ```
 
 ## How the consistency model works
@@ -466,13 +488,10 @@ Startup is also guarded:
 - every node ensures the state row exists,
 - if two nodes try to create it at the same time, one succeeds and the other ignores the duplicate insert race.
 
-Local demo note:
+This gives you two usable deployment stories:
 
-- SQLite works for the same-machine multi-process demonstration.
-
-Production note:
-
-- for separate containers or hosts, PostgreSQL is the intended backing store because all nodes share one transactional database.
+- SQLite for the required same-machine multi-process demonstration.
+- PostgreSQL for the stronger separate-container demonstration where all nodes share one central transactional database.
 
 ## Troubleshooting
 
@@ -519,8 +538,8 @@ python scripts/simulate_load.py --endpoints http://127.0.0.1:8010 http://127.0.0
 
 ## Summary
 
-For a same-machine demo, run two FastAPI nodes against the same SQLite file.
+Run two FastAPI nodes against the same SQLite file for the minimal required demonstration.
 
-For a stronger multi-container setup, run the Docker Compose stack so both nodes share PostgreSQL.
+If you want a stronger job-evaluation answer, run the Docker Compose setup so two separate API containers share one PostgreSQL database.
 
 In both cases, correctness comes from one shared transactional source of truth rather than in-memory state.

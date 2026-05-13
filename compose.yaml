@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: abacus
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-abacus}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d abacus"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-abacus}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -16,8 +16,8 @@ services:
   api-1:
     build: .
     environment:
-      ABACUS_DB_URL: postgresql+psycopg://postgres:postgres@postgres:5432/abacus
-      ABACUS_NODE_NAME: api-1
+      ABACUS_DB_URL: ${ABACUS_DB_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/abacus}
+      ABACUS_NODE_NAME: ${ABACUS_NODE_NAME_API_1:-api-1}
     ports:
       - "8000:8000"
     depends_on:
@@ -32,8 +32,8 @@ services:
   api-2:
     build: .
     environment:
-      ABACUS_DB_URL: postgresql+psycopg://postgres:postgres@postgres:5432/abacus
-      ABACUS_NODE_NAME: api-2
+      ABACUS_DB_URL: ${ABACUS_DB_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/abacus}
+      ABACUS_NODE_NAME: ${ABACUS_NODE_NAME_API_2:-api-2}
     ports:
       - "8001:8000"
     depends_on:

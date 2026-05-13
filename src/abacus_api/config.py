@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str = "sqlite:///./data/abacus.db"
+    database_url: str = "sqlite:///./data/abacus.db"  # update to postgres for multi-host testing
     node_name: str = "local"
 
     @classmethod
